@@ -1,6 +1,7 @@
 import requests
 import os
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 import pandas as pd
 
@@ -28,8 +29,8 @@ params = {
     "sort_by": "date"
 }
 
-if(os.path.exists("data/jobs_raw.csv")):
-    os.remove("data/jobs_raw.csv")
+os.makedirs("data/history", exist_ok=True)
+run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 page = 1
 all_jobs = []
@@ -65,4 +66,5 @@ while page <= 50:
     page += 1
 
 final_df = pd.concat(all_jobs, ignore_index=True)
+final_df.to_csv(f"data/history/jobs_raw_{run_timestamp}.csv", index=False)
 final_df.to_csv("data/jobs_raw.csv", index=False)
