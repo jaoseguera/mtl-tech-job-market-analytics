@@ -43,6 +43,8 @@ df["job_title"] = df["job_title"].str.lower()
 
 df = df.drop_duplicates(subset=["job_title", "company", "description"])
 
+df["has_salary"] = df["salary_min"].notna() & df["salary_max"].notna()
+
 df["salary_avg"] = (
     df["salary_min"] + df["salary_max"]
 ) / 2
