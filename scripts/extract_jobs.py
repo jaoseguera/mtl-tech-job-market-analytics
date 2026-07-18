@@ -1,7 +1,11 @@
 import requests
 import os
+import time
 from dotenv import load_dotenv
 import pandas as pd
+
+MAX_RETRIES = 3
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 load_dotenv()
 
@@ -31,12 +35,21 @@ page = 1
 all_jobs = []
 while page <= 50:
     url=f"https://api.adzuna.com/v1/api/jobs/ca/search/{page}"
-    response = requests.get(url, params=params)
+
+    for attempt in range(1, MAX_RETRIES + 1):
+        response = requests.get(url, params=params)
+        if response.ok:
+            break
+        if response.status_code not in RETRYABLE_STATUS_CODES or attempt == MAX_RETRIES:
+            print(f"Error fetching data: {response.status_code}")
+            print(f"Response content: {response.reason}")
+            print(f"Response text: {response.text}")
+            break
+        wait = 2 ** attempt
+        print(f"Retryable error {response.status_code}, retry {attempt}/{MAX_RETRIES} in {wait}s...")
+        time.sleep(wait)
 
     if not response.ok:
-        print(f"Error fetching data: {response.status_code}")
-        print(f"Response content: {response.reason}")
-        print(f"Response text: {response.text}")
         break
 
     data = response.json()
