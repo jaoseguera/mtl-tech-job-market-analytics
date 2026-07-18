@@ -15,6 +15,13 @@ columns_to_keep = [
     "contract_type"
 ]
 
+missing_columns = [col for col in columns_to_keep if col not in df.columns]
+if missing_columns:
+    raise SystemExit(
+        f"Colonnes manquantes dans jobs_raw.csv: {missing_columns}. "
+        "Le schéma de l'API Adzuna a peut-être changé."
+    )
+
 df = df[columns_to_keep]
 
 df.columns = [
