@@ -1,3 +1,4 @@
+import re
 import pandas as pd
 
 df = pd.read_csv("data/jobs_raw.csv")
@@ -59,10 +60,12 @@ skills = [
 ]
 
 for skill in skills:
+    pattern = rf"\b{re.escape(skill)}\b"
     df[skill] = df["description"].str.contains(
-        skill,
+        pattern,
         case=False,
-        na=False
+        na=False,
+        regex=True
     )
 
 df.to_csv("data/jobs_clean.csv", index=False)
