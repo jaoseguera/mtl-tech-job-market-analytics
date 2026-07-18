@@ -41,6 +41,8 @@ df["description"] = (
 df["description"] = df["description"].str.lower()
 df["job_title"] = df["job_title"].str.lower()
 
+df = df.drop_duplicates(subset=["job_title", "company", "description"])
+
 df["salary_avg"] = (
     df["salary_min"] + df["salary_max"]
 ) / 2
