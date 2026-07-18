@@ -8,6 +8,11 @@ load_dotenv()
 APP_ID = os.getenv("ADZUNA_APP_ID")
 APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
+if not APP_ID or not APP_KEY:
+    raise SystemExit(
+        "ADZUNA_APP_ID et ADZUNA_APP_KEY doivent être définis dans .env"
+    )
+
 params = {
     "app_id": APP_ID,
     "app_key": APP_KEY,
