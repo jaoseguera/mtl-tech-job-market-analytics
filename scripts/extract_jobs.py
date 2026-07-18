@@ -43,7 +43,6 @@ while page <= 50:
     df = pd.json_normalize(jobs)
     all_jobs.append(df)
 
-    #df.to_csv("data/jobs_raw.csv", mode="a", index=False, header=False)
     print(f"Page {page} extracted with {len(jobs)} jobs.")
     page += 1
 
