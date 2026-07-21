@@ -1,5 +1,12 @@
 import re
 import pandas as pd
+from datetime import datetime
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from config import SKILLS
 
 df = pd.read_csv("data/jobs_raw.csv")
 
@@ -58,21 +65,7 @@ df["salary_avg"] = (
     df["salary_min"] + df["salary_max"]
 ) / 2
 
-skills = [
-    "python",
-    "sql",
-    "aws",
-    "azure",
-    "docker",
-    "kubernetes",
-    "java",
-    "react",
-    "power bi",
-    "tableau",
-    "spark"
-]
-
-for skill in skills:
+for skill in SKILLS:
     pattern = rf"\b{re.escape(skill)}\b"
     df[skill] = df["description"].str.contains(
         pattern,
