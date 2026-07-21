@@ -12,7 +12,8 @@ columns_to_keep = [
     "salary_max",
     "created",
     "contract_time",
-    "contract_type"
+    "contract_type",
+    "id"
 ]
 
 missing_columns = [col for col in columns_to_keep if col not in df.columns]
@@ -33,7 +34,8 @@ df.columns = [
     "salary_max",
     "created_date",
     "contract_time",
-    "contract_type"
+    "contract_type",
+    "adzuna_id"
 ]
 
 df = df.dropna(subset=["job_title", "description"])
