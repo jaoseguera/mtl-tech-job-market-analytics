@@ -144,14 +144,6 @@ def load_data():
 
             # --- E. Insertion dans la TABLE DE FAITS (fact_job_postings) ---
             adzuna_id = str(row['adzuna_id']).strip() if pd.notna(row['adzuna_id']) else None
-            
-            # Vérification de doublon sur la clé naturelle adzuna_id
-            if adzuna_id:
-                cursor.execute("SELECT job_key FROM fact_job_postings WHERE adzuna_id = %s;", (adzuna_id,))
-                existing_job = cursor.fetchone()
-                if existing_job:
-                    skipped_jobs += 1
-                    continue # On passe à la ligne suivante pour éviter d'insérer des doublons
 
             # Convertir les valeurs numériques pour les types SQL appropriés
             salary_min = float(row['salary_min']) if pd.notna(row['salary_min']) else None
@@ -159,6 +151,9 @@ def load_data():
             salary_avg = float(row['salary_avg']) if pd.notna(row['salary_avg']) else None
             has_salary = bool(row['has_salary'])
 
+            # La contrainte UNIQUE sur adzuna_id gère le dédoublonnage : pas besoin
+            # d'un SELECT préalable, ON CONFLICT DO NOTHING ignore silencieusement
+            # les doublons (RETURNING ne renvoie alors aucune ligne).
             cursor.execute(
                 """
                 INSERT INTO fact_job_postings (
@@ -166,6 +161,7 @@ def load_data():
                     salary_min, salary_max, salary_avg, has_salary
                 )
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (adzuna_id) DO NOTHING
                 RETURNING job_key;
                 """,
                 (
@@ -182,7 +178,11 @@ def load_data():
                     has_salary
                 )
             )
-            job_key = cursor.fetchone()[0]
+            inserted_row = cursor.fetchone()
+            if inserted_row is None:
+                skipped_jobs += 1
+                continue
+            job_key = inserted_row[0]
             inserted_jobs += 1
 
             # --- F. Association des compétences (fact_job_skills) ---
