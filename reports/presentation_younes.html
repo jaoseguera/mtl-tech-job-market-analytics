@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MTI820 — Données et pipeline ETL</title>
+<style>
+  :root{
+    --surface:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --blue:#2a78d6; --deemph:#c3c2b7; --blue-dark:#184f95;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:#111; color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    display:flex;align-items:center;justify-content:center;
+  }
+  #deck{width:100vw;height:100vh;position:relative;overflow:hidden}
+  .slide{
+    position:absolute;inset:0;background:var(--surface);
+    padding:5.2vh 6vw 8vh;display:none;flex-direction:column;
+  }
+  .slide.active{display:flex}
+  h1{font-size:clamp(28px,4.6vw,60px);line-height:1.1;letter-spacing:-.02em}
+  h2{font-size:clamp(22px,3.1vw,40px);line-height:1.15;letter-spacing:-.015em;margin-bottom:.6em}
+  .kicker{
+    font-size:clamp(11px,1.15vw,15px);text-transform:uppercase;
+    letter-spacing:.14em;color:var(--muted);margin-bottom:1.1em;font-weight:600;
+  }
+  p,li{font-size:clamp(14px,1.55vw,22px);line-height:1.5;color:var(--ink2)}
+  ul{margin-left:1.1em;display:flex;flex-direction:column;gap:.55em}
+  li::marker{color:var(--blue)}
+  strong{color:var(--ink);font-weight:600}
+  .lead{font-size:clamp(16px,1.85vw,26px);color:var(--ink2);max-width:52ch}
+  .fig{
+    flex:1;min-height:0;display:flex;align-items:center;justify-content:center;
+    margin-top:1.4vh;
+  }
+  .fig img{max-width:100%;max-height:100%;object-fit:contain}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:3.2vw;flex:1;min-height:0;align-items:start}
+  .stat{font-size:clamp(38px,6.4vw,86px);font-weight:700;color:var(--blue);line-height:1;letter-spacing:-.03em}
+  .stat-label{font-size:clamp(13px,1.35vw,19px);color:var(--ink2);margin-top:.45em}
+  .stats{display:flex;gap:4.5vw;margin:1.6vh 0 .4vh;flex-wrap:wrap}
+  .card{border-left:3px solid var(--blue);padding:.15em 0 .15em 1em}
+  .card.warn{border-color:var(--deemph)}
+  code{
+    font-family:"Cascadia Code",Consolas,monospace;background:#f0efec;
+    padding:.12em .4em;border-radius:3px;font-size:.9em;color:var(--blue-dark);
+  }
+  .title-slide{justify-content:center}
+  .title-slide .meta{margin-top:2.2em;color:var(--muted);font-size:clamp(13px,1.4vw,19px);line-height:1.7}
+  footer{
+    position:absolute;left:6vw;right:6vw;bottom:2.6vh;display:flex;
+    justify-content:space-between;align-items:center;
+    font-size:clamp(10px,1vw,13px);color:var(--muted);
+    border-top:1px solid var(--grid);padding-top:.9vh;
+  }
+  #notes{
+    position:absolute;left:0;right:0;bottom:0;background:#0b0b0b;color:#e8e8e4;
+    padding:1.1em 6vw;font-size:15px;line-height:1.55;display:none;
+  }
+  #notes.show{display:block}
+  .hint{position:fixed;right:12px;top:10px;color:#666;font-size:11px;z-index:9}
+</style>
+</head>
+<body>
+<div class="hint">← → naviguer · N notes · F plein écran</div>
+<div id="deck">
+
+<section class="slide title-slide" data-notes="Me présenter, annoncer le plan : d'abord comment on fabrique la donnée, ensuite ce que la donnée nous a appris — y compris ce qu'elle ne permet PAS de dire.">
+  <div class="kicker">MTI820 — Entrepôts de données et intelligence d'affaires</div>
+  <h1>Données et pipeline ETL</h1>
+  <p class="lead" style="margin-top:.8em">Comment 2 671 offres d'emploi passent d'une API publique à un entrepôt décisionnel — et ce qu'elles révèlent en chemin.</p>
+  <div class="meta">Younes Hadari<br>Projet : analyse du marché de l'emploi TI à Montréal</div>
+</section>
+
+<section class="slide" data-notes="Situer ma partie : je suis le maillon entre la source brute et le modèle dimensionnel que José présente. Mon angle : la fiabilité. Un entrepôt ne vaut que ce que vaut la donnée qui y entre.">
+  <div class="kicker">Situer la partie</div>
+  <h2>Ma partie : de la source brute à l'entrepôt</h2>
+  <ul>
+    <li><strong>Extraction</strong> — interroger l'API Adzuna de façon reproductible et résiliente</li>
+    <li><strong>Transformation</strong> — nettoyer, dédoublonner, détecter les compétences</li>
+    <li><strong>Chargement</strong> — alimenter le schéma en étoile sans jamais dupliquer</li>
+    <li><strong>Qualité</strong> — mesurer ce que la donnée permet, et ne permet pas, d'affirmer</li>
+  </ul>
+  <p style="margin-top:1.4em" class="card"><strong>Le fil conducteur :</strong> un entrepôt ne vaut que ce que vaut la donnée qui y entre. La moitié de mon travail a consisté à établir dans quelle mesure on peut faire confiance à nos propres chiffres.</p>
+</section>
+
+<section class="slide" data-notes="Adzuna : agrégateur d'offres, API publique documentée. Filtres : catégorie it-jobs, Montréal, rayon 100 km, tri par date, pagination par 100. Insister sur le fait que c'est une source OUVERTE — donc gratuite mais contrainte.">
+  <div class="kicker">Extraction</div>
+  <h2>La source : l'API Adzuna</h2>
+  <div class="cols">
+    <div>
+      <p style="margin-bottom:.9em"><strong>Ce qu'on demande</strong></p>
+      <ul>
+        <li>Catégorie <code>it-jobs</code></li>
+        <li>Montréal, rayon 100 km</li>
+        <li>Tri par date de publication</li>
+        <li>Pagination par tranches de 100</li>
+      </ul>
+    </div>
+    <div>
+      <p style="margin-bottom:.9em"><strong>Ce qu'on reçoit par offre</strong></p>
+      <ul>
+        <li>Identifiant unique, titre, description</li>
+        <li>Entreprise, localisation, date</li>
+        <li>Modalités de contrat</li>
+        <li>Fourchette salariale — <strong>rarement</strong></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-notes="Trois scripts distincts, pas un monolithe. Pourquoi : on peut rejouer la transformation sans re-solliciter l'API (et donc sans consommer le quota), et chaque étape est traçable et versionnée séparément.">
+  <div class="kicker">Architecture du pipeline</div>
+  <h2>Trois scripts, trois responsabilités</h2>
+  <ul>
+    <li><code>extract_jobs.py</code> — appelle l'API, produit un CSV brut horodaté</li>
+    <li><code>transform_jobs.py</code> — nettoie, dédoublonne, détecte les compétences</li>
+    <li><code>load_jobs.py</code> — alimente PostgreSQL selon le schéma en étoile</li>
+  </ul>
+  <p style="margin-top:1.5em" class="card"><strong>Pourquoi les séparer ?</strong> On peut rejouer la transformation sans re-solliciter l'API — donc sans consommer le quota ni dépendre de sa disponibilité. Chaque étape est testable et versionnée isolément.</p>
+</section>
+
+<section class="slide" data-notes="Trois mécanismes de robustesse. Le retry est le plus important : avec 50 pages appelées à la suite, un seul 429 faisait perdre TOUT le run avant correction. Le backoff exponentiel : 2s puis 4s. Les erreurs définitives (401/403) échouent tout de suite — inutile de réessayer un mauvais mot de passe.">
+  <div class="kicker">Extraction</div>
+  <h2>Rendre l'extraction fiable</h2>
+  <ul>
+    <li><strong>Validation de la configuration</strong> — clés d'API absentes ⇒ arrêt immédiat avec un message clair, plutôt qu'une erreur 401 opaque après plusieurs appels</li>
+    <li><strong>Réessais avec délai exponentiel</strong> — les codes 429 et 5xx déclenchent jusqu'à 3 essais par page (2 s, puis 4 s)</li>
+    <li><strong>Échec rapide sur erreur définitive</strong> — un 401 ou 403 ne se réessaie pas</li>
+    <li><strong>Historisation</strong> — chaque exécution archive une copie horodatée du brut</li>
+  </ul>
+  <p style="margin-top:1.4em" class="card"><strong>Avant correction :</strong> 50 pages appelées d'affilée, et un seul incident réseau faisait perdre l'intégralité des pages déjà collectées.</p>
+</section>
+
+<section class="slide" data-notes="Le dédoublonnage se fait à deux niveaux : ici sur le triplet, et plus tard en base sur l'identifiant Adzuna. Ceinture ET bretelles, parce que la multi-diffusion est massive sur ce genre de plateforme.">
+  <div class="kicker">Transformation</div>
+  <h2>Nettoyer et dédoublonner</h2>
+  <ul>
+    <li><strong>Validation du schéma</strong> — les colonnes attendues sont vérifiées avant usage : si l'API change, le message est explicite</li>
+    <li><strong>Nettoyage textuel</strong> — retours à la ligne, espaces, passage en minuscules</li>
+    <li><strong>Dédoublonnage</strong> sur le triplet (titre, entreprise, description)</li>
+    <li><strong>Enrichissement</strong> — salaire moyen calculé et indicateur <code>has_salary</code></li>
+  </ul>
+  <p style="margin-top:1.4em" class="card"><strong>Deux filets successifs :</strong> ici sur le contenu, puis en base sur l'identifiant Adzuna. La multi-diffusion des offres est massive sur ce type de plateforme.</p>
+</section>
+
+<section class="slide" data-notes="LE moment intéressant pour la classe. Poser la question à l'auditoire : 'qu'est-ce qui cloche avec str.contains(\"java\") ?' Laisser 3 secondes. Réponse : ça matche javascript. Notre classement Java était gonflé par toutes les offres JavaScript. Même problème pour sql dans nosql. Correction : délimiteurs de mots.">
+  <div class="kicker">Transformation</div>
+  <h2>Le piège de la détection de compétences</h2>
+  <p class="lead" style="margin-bottom:1.1em">Version initiale : chercher le mot-clé dans la description.</p>
+  <p style="font-size:clamp(16px,2.1vw,30px);color:var(--ink);margin-bottom:1.1em"><code style="font-size:1em">description.str.contains("java")</code></p>
+  <div class="card warn">
+    <p><strong>Problème :</strong> « java » se trouve aussi à l'intérieur de « java<span style="color:var(--blue);font-weight:600">script</span> ». Toutes les offres JavaScript étaient comptées comme des offres Java. Idem pour « sql » dans « nosql ».</p>
+  </div>
+  <p style="margin-top:1.2em"><strong>Correction — délimiteurs de mots :</strong> <code>\bjava\b</code></p>
+  <p style="margin-top:.6em;color:var(--muted)">Une faute d'une ligne qui faussait le résultat le plus visible de tout le projet.</p>
+</section>
+
+<section class="slide" data-notes="Idempotence : notion clé. On peut relancer le pipeline autant de fois qu'on veut, la base reste cohérente. Vérifié expérimentalement : deuxième exécution = 0 insertion, 199 ignorées. La contrainte UNIQUE fait le travail, pas un SELECT préalable.">
+  <div class="kicker">Chargement</div>
+  <h2>Charger sans jamais dupliquer</h2>
+  <ul>
+    <li>La contrainte d'unicité porte sur l'identifiant naturel Adzuna</li>
+    <li>L'insertion est conditionnelle : <code>ON CONFLICT DO NOTHING</code></li>
+    <li>Aucun <code>SELECT</code> préalable — la base tranche elle-même, en une seule requête</li>
+  </ul>
+  <div class="stats">
+    <div><div class="stat">0</div><div class="stat-label">insertion à la 2<sup>e</sup> exécution</div></div>
+    <div><div class="stat">199</div><div class="stat-label">offres correctement ignorées</div></div>
+  </div>
+  <p class="card"><strong>Idempotence :</strong> relancer le pipeline ne corrompt jamais l'entrepôt. Vérifié expérimentalement.</p>
+</section>
+
+<section class="slide" data-notes="Performance : deux optimisations. Le cache des dimensions — 700 entreprises pour 2671 offres, donc beaucoup de répétitions ; inutile d'interroger la base à chaque fois. Et execute_values pour insérer par lots au lieu de ligne à ligne.">
+  <div class="kicker">Chargement</div>
+  <h2>Deux optimisations de chargement</h2>
+  <ul>
+    <li><strong>Cache des dimensions</strong> — les clés d'entreprise, de localisation, de contrat et de date déjà résolues restent en mémoire</li>
+    <li><strong>Insertions par lots</strong> — <code>execute_values</code> plutôt qu'une requête par ligne</li>
+  </ul>
+  <div class="stats">
+    <div><div class="stat">700</div><div class="stat-label">entreprises distinctes…</div></div>
+    <div><div class="stat">2 671</div><div class="stat-label">…pour autant d'offres à charger</div></div>
+  </div>
+  <p class="card">Chaque entreprise revient en moyenne près de 4 fois : sans cache, c'est autant d'allers-retours inutiles vers la base.</p>
+</section>
+
+<section class="slide" data-notes="Transition : on passe de 'comment c'est construit' à 'ce que la donnée dit vraiment'. Annoncer clairement : les quatre prochaines diapos sont des limites. C'est inhabituel de les mettre en avant, mais c'est le cœur de notre apport.">
+  <div class="kicker">Deuxième partie</div>
+  <h1 style="font-size:clamp(26px,4vw,52px)">Ce que la donnée permet —<br>et ne permet pas — d'affirmer</h1>
+  <p class="lead" style="margin-top:1.2em">Quatre limites mesurées sur le corpus. Les exposer n'affaiblit pas l'analyse : c'est ce qui la rend défendable.</p>
+</section>
+
+<section class="slide" data-notes="Deux taux à retenir : 7,7 % de couverture salariale, 8,8 % de détection de compétences. Cause principale : Adzuna tronque les descriptions à ~500 caractères, et les technologies sont souvent citées plus bas dans l'annonce.">
+  <div class="kicker">Limite 1 et 2</div>
+  <h2>Moins de 9 % du corpus est analysable</h2>
+  <div class="fig"><img src="figures/fig4_couverture_donnees.png" alt="Couverture des données : 7,7 % avec salaire, 8,8 % avec compétence détectée"></div>
+  <p style="margin-top:.8vh;color:var(--muted);font-size:clamp(12px,1.25vw,17px)">Cause principale : l'API tronque les descriptions à environ 500 caractères — les technologies sont souvent citées plus bas dans l'annonce.</p>
+</section>
+
+<section class="slide" data-notes="Le biais du recruteur. Java arrive premier — mais une seule agence pèse 11,7 % du corpus, avec surtout des postes Java. Donc le classement reflète en partie la stratégie d'un annonceur, pas le marché. C'est le genre de constat qu'on ne peut faire QUE parce qu'on a une dimension entreprise.">
+  <div class="kicker">Limite 3</div>
+  <h2>Un seul annonceur pèse 11,7 % du corpus</h2>
+  <div class="fig"><img src="figures/fig2_biais_recruteur.png" alt="Une agence publie 313 offres, les 7 autres principaux annonceurs entre 41 et 80"></div>
+  <p style="margin-top:.8vh;color:var(--muted);font-size:clamp(12px,1.25vw,17px)">La première place de Java reflète en partie la multi-diffusion d'une seule agence — pas une demande répartie sur le marché.</p>
+</section>
+
+<section class="slide" data-notes="La découverte la plus intéressante. Le volume monte de 35 à 467 offres/semaine. Tentant de conclure 'le marché accélère'. FAUX : Adzuna ne sert que les offres encore actives, donc les semaines anciennes sont amputées des annonces expirées. On mesure la récence de notre collecte. Et le pic de mai : 313 offres de la même agence, toutes le même jour. Conclusion : la question de la saisonnalité ne peut pas être tranchée.">
+  <div class="kicker">Limite 4</div>
+  <h2>La « croissance » n'est pas une croissance</h2>
+  <div class="fig"><img src="figures/fig5_volume_hebdomadaire.png" alt="Volume hebdomadaire croissant, artefact de collecte"></div>
+  <p style="margin-top:.8vh;color:var(--muted);font-size:clamp(12px,1.25vw,17px)">L'API ne retourne que les offres encore actives : les semaines anciennes sont amputées des annonces expirées. <strong style="color:var(--ink2)">La question de la saisonnalité ne peut pas être tranchée avec ce corpus.</strong></p>
+</section>
+
+<section class="slide" data-notes="Le point à faire passer absolument. Ces biais étaient INVISIBLES dans le CSV plat de départ. C'est le croisement faits × entreprise × temps qui les a révélés. Autrement dit : le modèle dimensionnel n'a pas seulement accéléré les requêtes, il a produit un résultat d'analyse. C'est la meilleure justification de la démarche Kimball qu'on puisse donner.">
+  <div class="kicker">Ce qu'il faut retenir</div>
+  <h2>Le modèle dimensionnel a produit le résultat</h2>
+  <p class="lead" style="margin-bottom:1.3em">Le dépôt massif du 12 mai et le biais de récence étaient <strong>invisibles dans le fichier plat</strong> de départ.</p>
+  <ul>
+    <li>C'est le croisement <strong>faits × dimension entreprise</strong> qui a isolé l'agence</li>
+    <li>C'est le croisement <strong>faits × dimension temps</strong> qui a révélé l'artefact de collecte</li>
+  </ul>
+  <p style="margin-top:1.5em" class="card">Le schéma en étoile n'a pas seulement accéléré les requêtes : il a <strong>produit un résultat d'analyse</strong> que la source brute dissimulait.</p>
+</section>
+
+<section class="slide" data-notes="Terminer sur les suites concrètes. Trois pistes chiffrables. Puis rendre la parole / passer au membre suivant.">
+  <div class="kicker">Suites</div>
+  <h2>Améliorations identifiées</h2>
+  <ul>
+    <li><strong>Normalisation financière</strong> — convertir les taux horaires en équivalent annuel pour rendre les rémunérations comparables</li>
+    <li><strong>Descriptions complètes</strong> — suivre l'URL de redirection pour contourner la troncature à 500 caractères, et retrouver les compétences manquantes</li>
+    <li><strong>Profondeur historique</strong> — l'historisation horodatée déjà en place permettra, après plusieurs mois, de répondre enfin à la question de la saisonnalité</li>
+  </ul>
+  <p style="margin-top:1.5em" class="card">Chacune de ces pistes répond à une limite <em>mesurée</em>, pas supposée.</p>
+</section>
+
+<div id="notes"></div>
+</div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+const notes=document.getElementById('notes');
+let i=0, notesOn=false;
+
+function render(){
+  slides.forEach((s,n)=>s.classList.toggle('active',n===i));
+  const s=slides[i];
+  if(!s.querySelector('footer')){
+    const f=document.createElement('footer');
+    f.innerHTML=`<span>MTI820 — Données et pipeline ETL</span><span>${i+1} / ${slides.length}</span>`;
+    s.appendChild(f);
+  }
+  notes.textContent=s.dataset.notes||'';
+  notes.classList.toggle('show',notesOn && !!s.dataset.notes);
+}
+function go(d){ i=Math.min(slides.length-1,Math.max(0,i+d)); render(); }
+
+addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(1)}
+  else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(-1)}
+  else if(e.key==='Home'){i=0;render()}
+  else if(e.key==='End'){i=slides.length-1;render()}
+  else if(e.key.toLowerCase()==='n'){notesOn=!notesOn;render()}
+  else if(e.key.toLowerCase()==='f'){
+    document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
+  }
+});
+addEventListener('click',e=>{ if(!e.target.closest('#notes')) go(1); });
+render();
+</script>
+</body>
+</html>
