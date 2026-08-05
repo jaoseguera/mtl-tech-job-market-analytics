@@ -15,7 +15,7 @@ APP_KEY = os.getenv("ADZUNA_APP_KEY")
 
 if not APP_ID or not APP_KEY:
     raise SystemExit(
-        "ADZUNA_APP_ID et ADZUNA_APP_KEY doivent être définis dans .env"
+        "ADZUNA_APP_ID and ADZUNA_APP_KEY should be defined in the .env file."
     )
 
 params = {
@@ -34,7 +34,7 @@ run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 page = 1
 all_jobs = []
-while page <= 50:
+while page <= 500:
     url=f"https://api.adzuna.com/v1/api/jobs/ca/search/{page}"
 
     for attempt in range(1, MAX_RETRIES + 1):

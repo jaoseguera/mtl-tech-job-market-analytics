@@ -21,7 +21,7 @@ DB_PASS = os.getenv("DB_PASS")
 
 if not all([DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS]):
     raise SystemExit(
-        "DB_HOST, DB_PORT, DB_NAME, DB_USER et DB_PASS doivent être définis dans .env"
+        "DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASS must be defined in the .env file."
     )
 
 def get_db_connection():
@@ -34,24 +34,24 @@ def get_db_connection():
     )
 
 def load_data():
-    # 1. Charger les données nettoyées
+    # 1. Load the cleaned data
     csv_path = "data/jobs_clean.csv"
     if not os.path.exists(csv_path):
-        print(f"Erreur : Le fichier {csv_path} n'existe pas. Veuillez lancer 'transform_jobs.py' d'abord.")
+        print(f"Error: The file {csv_path} does not exist. Please run 'transform_jobs.py' first.")
         return
 
     df = pd.read_csv(csv_path)
-    print(f"Chargement de {len(df)} offres d'emploi depuis {csv_path}...")
+    print(f"Loading {len(df)} job postings from {csv_path}...")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # ÉTAPE 1 : PRÉ-ALIMENTER LA DIMENSION DES COMPÉTENCES (dim_skills)
-        print("Alimentation de dim_skills...")
-        skill_keys = {} # Pour garder en mémoire les couples {nom_competence: skill_key}
+        # STEP 1: PRE-POPULATE THE SKILLS DIMENSION (dim_skills)
+        print("Populating dim_skills...")
+        skill_keys = {} # To keep track of the {skill_name: skill_key} pairs in memory
         for skill in SKILLS:
-            # On insère si elle n'existe pas, et on récupère le skill_key
+            # Insert if it doesn't exist, and retrieve the skill_key
             cursor.execute(
                 """
                 INSERT INTO dim_skills (skill_name)
@@ -64,28 +64,28 @@ def load_data():
             skill_key = cursor.fetchone()[0]
             skill_keys[skill] = skill_key
         
-        # ÉTAPE 2 : RÉSOUDRE LES DIMENSIONS POUR CHAQUE OFFRE
-        # Les dictionnaires ci-dessous évitent de refaire un aller-retour SQL pour
-        # une entreprise/localisation/contrat/date déjà vue plus tôt dans ce run.
-        print("Résolution des dimensions (date, entreprise, localisation, contrat)...")
+        # STEP 2: RESOLVE DIMENSIONS FOR EACH POSTING
+        # The dictionaries below prevent redundant SQL roundtrips for
+        # a company/location/contract/date already processed in this run.
+        print("Resolving dimensions (date, company, location, contract)...")
         seen_dates = set()
         company_keys = {}
         location_keys = {}
         contract_keys = {}
 
-        # On sépare les offres avec adzuna_id (dédoublonnables) de celles sans
-        # (toujours insérées) pour pouvoir batcher les deux en toute sécurité.
+        # Separate postings with adzuna_id (deduplicatable) from those without
+        # (always inserted) to batch both of them safely.
         rows_with_id = []
         rows_without_id = []
 
         for index, row in df.iterrows():
-            # --- A. Gestion de la dimension DATE (dim_date) ---
-            # Adzuna formatte la date sous forme de timestamp ISO (ex: 2026-07-21T10:16:59Z)
-            # On extrait uniquement la partie date YYYY-MM-DD
+            # --- A. Handle the DATE dimension (dim_date) ---
+            # Adzuna formats the date as an ISO timestamp (e.g., 2026-07-21T10:16:59Z)
+            # We extract only the YYYY-MM-DD date part
             raw_date = str(row['created_date'])
             date_obj = pd.to_datetime(raw_date)
 
-            # Génération de la clé sous format entier YYYYMMDD
+            # Generate the key as an integer format YYYYMMDD
             date_key = int(date_obj.strftime("%Y%m%d"))
 
             if date_key not in seen_dates:
@@ -102,32 +102,33 @@ def load_data():
                         date_obj.date(),
                         date_obj.year,
                         date_obj.month,
-                        date_obj.strftime("%B"), # Nom du mois en anglais (ou selon la locale)
+                        date_obj.strftime("%B"), # Month name in English (or based on locale)
                         date_obj.day,
-                        (date_obj.month - 1) // 3 + 1, # Trimestre
-                        date_obj.isoweekday(), # 1 (Lundi) à 7 (Dimanche)
-                        date_obj.strftime("%A") # Nom du jour
+                        (date_obj.month - 1) // 3 + 1, # Quarter
+                        date_obj.isoweekday(), # 1 (Monday) to 7 (Sunday)
+                        date_obj.strftime("%A") # Day name
                     )
                 )
                 seen_dates.add(date_key)
 
-            # --- B. Gestion de la dimension ENTREPRISE (dim_company) ---
-            company_name = str(row['company']).strip() if pd.notna(row['company']) else "Inconnu"
+            # --- B. Handle the COMPANY dimension (dim_company) ---
+            company_name = str(row['company']).strip() if pd.notna(row['company']) else "Unknown"
+            company_sector = str(row['company_sector']).strip() if pd.notna(row['company_sector']) else "not_specified"
             if company_name not in company_keys:
                 cursor.execute(
                     """
-                    INSERT INTO dim_company (company_name)
-                    VALUES (%s)
-                    ON CONFLICT (company_name) DO UPDATE SET company_name = EXCLUDED.company_name
+                    INSERT INTO dim_company (company_name, company_sector)
+                    VALUES (%s, %s)
+                    ON CONFLICT (company_name) DO UPDATE SET company_sector = EXCLUDED.company_sector
                     RETURNING company_key;
                     """,
-                    (company_name,)
+                    (company_name, company_sector)
                 )
                 company_keys[company_name] = cursor.fetchone()[0]
             company_key = company_keys[company_name]
 
-            # --- C. Gestion de la dimension LOCALISATION (dim_location) ---
-            location_name = str(row['location']).strip() if pd.notna(row['location']) else "Montréal"
+            # --- C. Handle the LOCATION dimension (dim_location) ---
+            location_name = str(row['location']).strip() if pd.notna(row['location']) else "Montreal"
             if location_name not in location_keys:
                 cursor.execute(
                     """
@@ -141,7 +142,7 @@ def load_data():
                 location_keys[location_name] = cursor.fetchone()[0]
             location_key = location_keys[location_name]
 
-            # --- D. Gestion de la dimension CONTRAT (dim_contract) ---
+            # --- D. Handle the CONTRACT dimension (dim_contract) ---
             contract_time = str(row['contract_time']).strip() if pd.notna(row['contract_time']) else "unknown"
             contract_type = str(row['contract_type']).strip() if pd.notna(row['contract_type']) else "unknown"
             contract_combo = (contract_time, contract_type)
@@ -151,7 +152,7 @@ def load_data():
                     INSERT INTO dim_contract (contract_time, contract_type)
                     VALUES (%s, %s)
                     ON CONFLICT (contract_time, contract_type) DO UPDATE
-                        SET contract_time = EXCLUDED.contract_time -- astuce pour récupérer l'ID existant
+                        SET contract_time = EXCLUDED.contract_time -- trick to retrieve the existing ID
                     RETURNING contract_key;
                     """,
                     contract_combo
@@ -159,7 +160,7 @@ def load_data():
                 contract_keys[contract_combo] = cursor.fetchone()[0]
             contract_key = contract_keys[contract_combo]
 
-            # --- E. Préparation de la ligne pour la TABLE DE FAITS (fact_job_postings) ---
+            # --- E. Prepare row for the FACT TABLE (fact_job_postings) ---
             adzuna_id = str(row['adzuna_id']).strip() if pd.notna(row['adzuna_id']) else None
             salary_min = float(row['salary_min']) if pd.notna(row['salary_min']) else None
             salary_max = float(row['salary_max']) if pd.notna(row['salary_max']) else None
@@ -167,9 +168,18 @@ def load_data():
             has_salary = bool(row['has_salary'])
             matched_skills = [skill for skill in SKILLS if bool(row[skill]) is True]
 
+            # Extract new dimensions
+            language = str(row['language']).strip() if pd.notna(row['language']) else 'not_specified'
+            experience_level = str(row['experience_level']).strip() if pd.notna(row['experience_level']) else 'not_specified'
+            work_model = str(row['work_model']).strip() if pd.notna(row['work_model']) else 'not_specified'
+            latitude = float(row['latitude']) if pd.notna(row['latitude']) else None
+            longitude = float(row['longitude']) if pd.notna(row['longitude']) else None
+            neighborhood = str(row['neighborhood']).strip() if pd.notna(row['neighborhood']) else 'not_specified'
+
             fact_row = (
                 adzuna_id, row['job_title'], row['description'], company_key, location_key,
-                date_key, contract_key, salary_min, salary_max, salary_avg, has_salary
+                date_key, contract_key, salary_min, salary_max, salary_avg, has_salary,
+                language, experience_level, work_model, latitude, longitude, neighborhood
             )
 
             if adzuna_id:
@@ -177,27 +187,33 @@ def load_data():
             else:
                 rows_without_id.append((fact_row, matched_skills))
 
-        # ÉTAPE 3 : INSERTION EN LOT DES OFFRES (fact_job_postings)
-        print("Insertion en lot des offres d'emploi...")
+        # STEP 3: BULK INSERT JOB POSTINGS (fact_job_postings)
+        print("Bulk inserting job postings...")
         inserted_jobs = 0
         skipped_jobs = 0
         job_skill_rows = []
 
         if rows_with_id:
-            # La contrainte UNIQUE sur adzuna_id gère le dédoublonnage : ON CONFLICT
-            # DO NOTHING ignore silencieusement les doublons (pas de ligne retournée
-            # pour elles), donc on ne peut pas mapper les résultats par position —
-            # on remappe par adzuna_id à la place.
+            # UNIQUE constraint on adzuna_id handles deduplication: ON CONFLICT
+            # DO UPDATE updates all descriptive and analytical columns
             fact_rows = [r for r, _ in rows_with_id]
             inserted = execute_values(
                 cursor,
                 """
                 INSERT INTO fact_job_postings (
                     adzuna_id, job_title, description, company_key, location_key, date_key, contract_key,
-                    salary_min, salary_max, salary_avg, has_salary
+                    salary_min, salary_max, salary_avg, has_salary,
+                    language, experience_level, work_model, latitude, longitude, neighborhood
                 )
                 VALUES %s
-                ON CONFLICT (adzuna_id) DO NOTHING
+                ON CONFLICT (adzuna_id) DO UPDATE SET 
+                    description = EXCLUDED.description,
+                    language = EXCLUDED.language,
+                    experience_level = EXCLUDED.experience_level,
+                    work_model = EXCLUDED.work_model,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    neighborhood = EXCLUDED.neighborhood
                 RETURNING adzuna_id, job_key;
                 """,
                 fact_rows,
@@ -214,15 +230,15 @@ def load_data():
                 job_skill_rows.extend((job_key, skill_keys[skill]) for skill in matched_skills)
 
         if rows_without_id:
-            # Pas d'adzuna_id : rien à dédoublonner, donc pas de ON CONFLICT et les
-            # lignes retournées suivent l'ordre d'insertion des VALUES fournies.
+            # No adzuna_id: nothing to deduplicate
             fact_rows = [r for r, _ in rows_without_id]
             inserted = execute_values(
                 cursor,
                 """
                 INSERT INTO fact_job_postings (
                     adzuna_id, job_title, description, company_key, location_key, date_key, contract_key,
-                    salary_min, salary_max, salary_avg, has_salary
+                    salary_min, salary_max, salary_avg, has_salary,
+                    language, experience_level, work_model, latitude, longitude, neighborhood
                 )
                 VALUES %s
                 RETURNING job_key;
@@ -235,7 +251,7 @@ def load_data():
             for (job_key,), (_, matched_skills) in zip(inserted, rows_without_id):
                 job_skill_rows.extend((job_key, skill_keys[skill]) for skill in matched_skills)
 
-        # ÉTAPE 4 : INSERTION EN LOT DES COMPÉTENCES ASSOCIÉES (fact_job_skills)
+        # STEP 4: BULK INSERT OF ASSOCIATED SKILLS (fact_job_skills)
         if job_skill_rows:
             execute_values(
                 cursor,
@@ -247,21 +263,21 @@ def load_data():
                 job_skill_rows
             )
 
-        # Valider toutes les transactions à la fin s'il n'y a pas eu d'erreurs
+        # Validate all transactions at the end if there were no errors
         conn.commit()
         print("\n==================================================")
-        print("ALIMENTATION TERMINÉE AVEC SUCCÈS !")
-        print(f"Offres insérées : {inserted_jobs}")
-        print(f"Offres ignorées (déjà existantes) : {skipped_jobs}")
+        print("LOAD COMPLETED SUCCESSFULLY!")
+        print(f"Postings inserted: {inserted_jobs}")
+        print(f"Postings ignored (already existing): {skipped_jobs}")
         print("==================================================")
 
     except Exception as e:
-        # En cas d'erreur, on annule tout ce qui a été fait dans cette transaction pour garder la BD propre
+        # In case of an error, rollback everything done in this transaction to keep the DB clean
         conn.rollback()
-        print(f"\nUne erreur est survenue lors du chargement : {e}")
-        print("Toutes les modifications de cette session ont été annulées (Rollback).")
+        print(f"\nAn error occurred during loading: {e}")
+        print("All changes from this session have been rolled back (Rollback).")
     finally:
-        # Fermer la connexion proprement
+        # Properly close the connection
         cursor.close()
         conn.close()
 
