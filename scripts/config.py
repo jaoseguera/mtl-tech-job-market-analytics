@@ -1,4 +1,4 @@
-# Liste globale des compétences technologiques analysées dans le projet
+# Global list of tech skills analyzed in the project
 SKILLS = [
     "python", 
     "sql", 
@@ -10,5 +10,20 @@ SKILLS = [
     "react", 
     "power bi", 
     "tableau", 
+    "javascript",
+    "typescript",
+    "devops",
+    "ci/cd",
+    "git",
+    "gcp",
+    "postgresql",
+    "snowflake",
+    "terraform",
+    "agile",
+    "scrum",
+    "api",
+    "microservices",
+    "oracle",
+    "linux",
     "spark"
 ]
